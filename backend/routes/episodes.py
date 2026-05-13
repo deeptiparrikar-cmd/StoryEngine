@@ -1,11 +1,11 @@
-"""Sprint 1 episode API: create from story + list episodes."""
+"""Episode API routes — Sprints 1-4."""
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
-import json
 from flask import Blueprint, jsonify, request
 
 from backend import db
@@ -130,5 +130,82 @@ def episode_detail(episode_id: str):
             "cost_estimate": estimate,
             "max_spend_usd": max_spend,
             "over_budget": float(estimate["total_usd"]) > max_spend,
+        }
+    )
+
+
+# ── Sprint 4: Generate ─────────────────────────────────────────────────────
+
+def _run_character_generation(episode_id: str, new_characters: list[dict]) -> None:
+    """Background task: generate 6-angle ref images for each new character."""
+    from backend.agents.image_agent import generate_character_images
+
+    db.update_episode_status(episode_id, "generating")
+    all_ok = True
+
+    for ch in new_characters:
+        char_id = ch.get("id") or re.sub(r"[^a-z0-9]+", "-", (ch.get("name") or "").lower()).strip("-")
+        try:
+            ref_paths = generate_character_images({"id": char_id, **ch})
+            db.upsert_character(
+                char_id,
+                ch.get("name", char_id),
+                ch.get("description"),
+                ref_images=ref_paths,
+            )
+        except Exception as exc:
+            all_ok = False
+            # Log but continue with remaining characters
+            print(f"[image_agent] character {char_id} failed: {exc}")
+
+    if all_ok:
+        db.update_episode_status(episode_id, "scripted")   # ready for video sprint
+    else:
+        db.update_episode_status(episode_id, "draft")
+
+
+@bp.post("/episodes/<episode_id>/generate")
+def episode_generate(episode_id: str):
+    episode = db.get_episode(episode_id)
+    if not episode:
+        return jsonify({"error": "episode not found"}), 404
+
+    # Pull new characters from stored plan_json
+    plan: dict = {}
+    raw = episode.get("plan_json") if isinstance(episode, dict) else None
+    if raw:
+        try:
+            plan = json.loads(raw)
+        except json.JSONDecodeError:
+            plan = {}
+
+    new_chars = [c for c in (plan.get("characters_needed") or []) if c.get("is_new")]
+
+    db.update_episode_status(episode_id, "approved")
+
+    from backend.utils.job_queue import submit
+    submit(_run_character_generation, episode_id, new_chars)
+
+    return jsonify(
+        {
+            "ok": True,
+            "episode_id": episode_id,
+            "status": "approved",
+            "characters_queued": len(new_chars),
+            "message": f"Generating {len(new_chars)} character(s) in background.",
+        }
+    ), 202
+
+
+@bp.get("/episodes/<episode_id>/generate-status")
+def episode_generate_status(episode_id: str):
+    """Lightweight poll used by the frontend during Sprint 4 generation."""
+    episode = db.get_episode(episode_id)
+    if not episode:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(
+        {
+            "episode_id": episode_id,
+            "status": episode.get("status"),
         }
     )

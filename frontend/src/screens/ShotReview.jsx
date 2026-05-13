@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 const MODEL_BADGE = {
@@ -222,14 +223,71 @@ function ShotCard({ shot, onUpdate, onRemove }) {
   );
 }
 
+/* ── Generation status banner ───────────────────────────── */
+function GeneratingBanner({ episodeId, onDone }) {
+  const [status, setStatus] = useState("approved");
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    function poll() {
+      fetch(`/api/episodes/${encodeURIComponent(episodeId)}/generate-status`)
+        .then((r) => r.json())
+        .then((d) => {
+          const s = d.status || "generating";
+          setStatus(s);
+          if (s === "generating" || s === "approved") {
+            timerRef.current = setTimeout(poll, 5000);
+          } else {
+            onDone(s);
+          }
+        })
+        .catch(() => {
+          timerRef.current = setTimeout(poll, 8000);
+        });
+    }
+    timerRef.current = setTimeout(poll, 3000);
+    return () => clearTimeout(timerRef.current);
+  }, [episodeId, onDone]);
+
+  return (
+    <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "1.25rem", marginTop: "1rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ fontSize: "1.4rem" }}>
+          {status === "generating" || status === "approved" ? "⏳" : status === "scripted" ? "✅" : "⚠️"}
+        </span>
+        <div>
+          <strong>
+            {status === "approved" ? "Starting generation…" :
+             status === "generating" ? "Generating character images…" :
+             status === "scripted" ? "Character images done!" : `Status: ${status}`}
+          </strong>
+          {(status === "generating" || status === "approved") && (
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Creating 6 reference angles per new character via OpenRouter. Checking every 5s…
+            </p>
+          )}
+          {status === "scripted" && (
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Check <code>OUTPUT_DIR/characters/</code> for downloaded images.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main screen ────────────────────────────────────────── */
 export default function ShotReview() {
   const { episodeId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [data, setData] = useState(location.state || null);
   const [shots, setShots] = useState(null);
   const [loading, setLoading] = useState(!location.state);
   const [error, setError] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
 
   useEffect(() => {
     const src = location.state;
@@ -259,6 +317,31 @@ export default function ShotReview() {
     setShots((prev) => prev.filter((s) => s.id !== id));
   }
 
+  async function handleGenerate() {
+    setGenError("");
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(episode.id)}/generate`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || res.statusText);
+      }
+    } catch (err) {
+      setGenError(err.message || String(err));
+      setGenerating(false);
+    }
+  }
+
+  const handleGenDone = useCallback((finalStatus) => {
+    setGenerating(false);
+    if (finalStatus === "scripted") {
+      // Refresh episode data to reflect updated status
+      navigate(0);
+    }
+  }, [navigate]);
+
   if (loading) return <p className="muted" style={{ padding: "2rem" }}>Reading the story…</p>;
   if (error) return <p className="warn" style={{ padding: "2rem" }}>{error} — <Link to="/new">try again</Link></p>;
   if (!data) return <p className="muted">Nothing to show.</p>;
@@ -267,11 +350,6 @@ export default function ShotReview() {
   const displayShots = shots || [];
   const newChars = (plan?.characters_needed || []).filter((c) => c.is_new);
   const totalUsd = Number(cost_estimate?.total_usd || 0);
-
-  function handleGenerate() {
-    console.log("[Story Engine] Generate clicked — episode:", episode?.id, "shots:", displayShots.length, "est:", totalUsd);
-    alert("Generation fires in Sprint 4. Shot list is saved — you're ready.");
-  }
 
   return (
     <>
@@ -323,9 +401,6 @@ export default function ShotReview() {
       {/* Shot list */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <h3 style={{ marginBottom: 8 }}>Shots ({displayShots.length})</h3>
-        {displayShots.length === 0 && (
-          <span className="muted" style={{ fontSize: "0.85rem" }}>All shots removed</span>
-        )}
       </div>
       <div className="card" style={{ padding: "0.5rem 1rem" }}>
         {displayShots.length === 0 && (
@@ -336,18 +411,28 @@ export default function ShotReview() {
         ))}
       </div>
 
+      {/* Generation status banner */}
+      {generating && <GeneratingBanner episodeId={episode?.id} onDone={handleGenDone} />}
+      {genError && <p className="warn" style={{ marginTop: "0.75rem" }}>{genError}</p>}
+
       {/* Generate button */}
-      <p style={{ marginTop: "1.25rem" }}>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={handleGenerate}
-          disabled={displayShots.length === 0}
-          style={{ fontSize: "1rem", padding: "0.7rem 1.5rem", background: over_budget ? "#b45309" : undefined }}
-        >
-          {over_budget ? "⚠ " : ""}Generate episode — ~${totalUsd.toFixed(2)}
-        </button>
-      </p>
+      {!generating && (
+        <p style={{ marginTop: "1.25rem" }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleGenerate}
+            disabled={displayShots.length === 0}
+            style={{
+              fontSize: "1rem",
+              padding: "0.7rem 1.5rem",
+              background: over_budget ? "#b45309" : undefined,
+            }}
+          >
+            {over_budget ? "⚠ " : ""}Generate episode — ~${totalUsd.toFixed(2)}
+          </button>
+        </p>
+      )}
     </>
   );
 }
