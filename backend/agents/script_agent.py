@@ -1,4 +1,4 @@
-"""Claude script planning — cinematic prompt architecture (v3 + addendum)."""
+"""Shot-list script planning via OpenRouter Claude Haiku."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 import re
 from typing import Any
 
-from anthropic import Anthropic
+import requests
 
 # Dev reference: vocabulary also embedded in the system prompt for the model.
 CINEMATIC_REFERENCES_KIDS = """
@@ -183,36 +183,58 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 def plan_episode(raw_story: str, existing_characters: list[dict[str, Any]]) -> dict[str, Any]:
     """
-    Calls Claude API. Returns parsed JSON shot plan.
+    Calls Claude via OpenRouter. Returns parsed JSON shot plan.
     existing_characters: rows from characters table (name, description, …).
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        raise RuntimeError("OPENROUTER_API_KEY is not set")
 
-    narrator = os.environ.get("NARRATOR_NAME", "Aanya").strip() or "Aanya"
-    model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
-
-    client = Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=model,
-        max_tokens=8192,
-        temperature=0.4,
-        system=_system_prompt(narrator, existing_characters),
-        messages=[
+    narrator = os.environ.get("NARRATOR_NAME", "Mini").strip() or "Mini"
+    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-3-5-haiku")
+    payload = {
+        "model": model,
+        "temperature": 0.4,
+        "max_tokens": 4096,
+        "messages": [
+            {"role": "system", "content": _system_prompt(narrator, existing_characters)},
             {
                 "role": "user",
                 "content": f"Here is the story to adapt into an episode:\n\n{raw_story}",
-            }
+            },
         ],
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=90,
     )
+    if response.status_code >= 400:
+        raise RuntimeError(f"OpenRouter error {response.status_code}: {response.text}")
 
-    text_parts: list[str] = []
-    for block in message.content:
-        if block.type == "text":
-            text_parts.append(block.text)
-    combined = "\n".join(text_parts).strip()
-    return _extract_json(combined)
+    data = response.json()
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("OpenRouter returned no choices")
+    msg_content = choices[0].get("message", {}).get("content")
+    if isinstance(msg_content, list):
+        parts: list[str] = []
+        for item in msg_content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+        combined = "\n".join(parts).strip()
+    else:
+        combined = str(msg_content or "").strip()
+
+    result = _extract_json(combined)
+    if not isinstance(result, dict) or not isinstance(result.get("shots"), list):
+        raise ValueError("Model JSON missing required 'shots' list")
+    return result
 
 
 def slugify_name(name: str) -> str:

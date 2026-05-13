@@ -15,14 +15,18 @@ SARVAM_DUB_USD = 0.012
 
 def estimate(
     shot_list: list[dict],
-    new_characters: list[dict],
-    dub_language_count: int,
-    episode_duration_sec: float,
+    new_characters: list[dict] | None = None,
+    dub_language_count: int = 9,
+    episode_duration_sec: float | None = None,
 ) -> dict:
     """
     Returns itemised cost breakdown + total.
     new_characters: entries with is_new True (each needs 6 reference images).
     """
+    new_characters = new_characters or []
+    if episode_duration_sec is None:
+        episode_duration_sec = sum(float(s.get("duration_sec") or 6) for s in shot_list)
+
     n_new = len(new_characters)
     char_images_cost = n_new * 6 * IMAGE_COST_USD
 

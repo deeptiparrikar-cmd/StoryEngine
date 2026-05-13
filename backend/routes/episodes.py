@@ -77,6 +77,7 @@ def episodes_new():
     return jsonify(
         {
             "episode": episode,
+            "shot_list": shots_rows,
             "shots": shots_rows,
             "plan": {
                 "characters_needed": plan.get("characters_needed"),
