@@ -1,0 +1,138 @@
+:root {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1a1a2e;
+  background: #f6f3ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: #2d6a4f;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-shell {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  margin-bottom: 1rem;
+}
+
+textarea.story-input {
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font: inherit;
+}
+
+.btn-primary {
+  background: #2d6a4f;
+  color: #fff;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-wan {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.badge-kling {
+  background: #ffedd5;
+  color: #c2410c;
+}
+.badge-seed {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+.badge-veo {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.shot-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.cost-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+  font-size: 0.95rem;
+}
+
+.cost-total {
+  font-weight: 700;
+  border-top: 1px solid #ddd;
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+}
+
+.amber {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.warn {
+  color: #b45309;
+  font-size: 0.9rem;
+}
+
+header.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+header.top h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.muted {
+  color: #666;
+  font-size: 0.9rem;
+}
