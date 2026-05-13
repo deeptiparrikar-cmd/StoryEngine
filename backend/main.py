@@ -10,6 +10,7 @@ from flask_cors import CORS
 
 from backend import db
 from backend.routes.episodes import bp as episodes_bp
+from backend.routes.shots import bp as shots_bp
 
 
 def create_app() -> Flask:
@@ -20,6 +21,7 @@ def create_app() -> Flask:
     db.init_db()
 
     app.register_blueprint(episodes_bp, url_prefix="/api")
+    app.register_blueprint(shots_bp, url_prefix="/api")
 
     @app.get("/api/health")
     def health():
